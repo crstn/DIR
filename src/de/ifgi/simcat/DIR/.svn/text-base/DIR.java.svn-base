@@ -1,0 +1,227 @@
+// Copyright 2007 Institute for Geoinformatics University of Muenster (SimCat
+// Project)
+// 
+// This file is part of SIM-DL.
+// 
+// SIM-DL is free software; you can redistribute it and/or modify it under the 
+// terms of the GNU General Public License as published by the Free Software 
+// Foundation; either version 2 of the License, or any later version.
+// 
+// SIM-DL is distributed in the hope that it will be useful, but WITHOUT ANY 
+// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS 
+// FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more 
+// details.
+// 
+// You should have received a copy of the GNU General Public License along with
+// SIM-DL; if not, write to the Free Software Foundation, Inc., 51 Franklin St,
+// Fifth Floor, Boston, MA  02110-1301  USA
+
+package de.ifgi.simcat.DIR;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+
+import org.apache.log4j.Logger;
+
+public class DIR {
+
+	private static Logger LOGGER = Logger.getLogger(DIR.class);
+
+	public static double getDIRrank(Ranking a, Ranking b) {
+		
+		int aRanksCount = a.getNumberOfRanks();
+		int bRanksCount = b.getNumberOfRanks();
+		int maxRanksCount = Math.max(aRanksCount, bRanksCount);
+
+		// this is to sum up the single weighted shifts
+		int nonNormalizedImpact = 0;
+		int shift = 0;
+		int weight = 0;
+		ArrayList<MergeResult> mergedRanking;
+
+		RankingMerge rm = new RankingMerge(a, b);
+		mergedRanking = rm.getMergedConcepts();
+		String info = mergedRanking.size() + " concepts in merged ranking.";
+
+		for (Iterator<MergeResult> iter = mergedRanking.iterator(); iter
+				.hasNext();) {
+			MergeResult currentResult = iter.next();
+			if (currentResult.getRankNumber() != -1
+					&& currentResult.getSecondRankNumber() != -1) {
+				// concept is in both rankings
+				shift = Math.abs(currentResult.getRankNumber()
+						- currentResult.getSecondRankNumber());
+				int w1 = maxRanksCount - currentResult.getRankNumber();
+				int w2 = maxRanksCount - currentResult.getSecondRankNumber();
+				info += "\nRanks for " + currentResult.getName() + " : "
+						+ currentResult.getRankNumber() + ", "
+						+ currentResult.getSecondRankNumber();
+				weight = Math.max(w1, w2); // no +1 here, since the ranks start
+				// at 0, not at 1 as in the paper!!
+				info += currentResult.getName() + ", Sh: " + shift + ", We: "
+						+ weight + "\n";
+			} else {
+				// concept is only in first ranking
+				if (currentResult.getRankNumber() != -1
+						&& currentResult.getSecondRankNumber() == -1) {
+					shift = Math.abs(currentResult.getRankNumber()
+							- maxRanksCount);
+				}
+				// concept is only in second ranking
+				if (currentResult.getRankNumber() == -1
+						&& currentResult.getSecondRankNumber() != -1) {
+
+					shift = Math.abs(currentResult.getSecondRankNumber()
+							- maxRanksCount);
+				}
+				
+				weight = maxRanksCount;
+				info += currentResult.getName() + ", Sh: " + shift
+						+ ", We: " + weight + "\n";
+		
+			}
+			nonNormalizedImpact += (shift * weight);
+		}
+
+		double result = (double) nonNormalizedImpact
+				/ (double) getDIRrankMax(a, b);
+		info += nonNormalizedImpact + " / " + getDIRrankMax(a, b) + " = "
+				+ result;
+
+		// Round the result to 5 decimals
+		double output = Math.round(result * 100000) / 100000.0;
+		if (output > 1.0) {
+			LOGGER.error("DIR > 1.0! Ranking A (" + a.getNumberOfRanks()
+					+ " ranks):\n");
+			a.log();
+			LOGGER.error("Ranking B (" + b.getNumberOfRanks() + " ranks):\n");
+			b.log();
+			LOGGER.error(info);
+		}
+		return output;
+
+	}
+
+	public static double getDIRrel(Ranking a, Ranking b) {
+		
+		int aRanksCount = a.getNumberOfRanks();
+		int bRanksCount = b.getNumberOfRanks();
+		int maxRanksCount = Math.max(aRanksCount, bRanksCount);
+
+		// this is to sum up the single weighted shifts
+		double nonNormalizedImpact = 0.0;
+		boolean printInfo = false;
+
+		ArrayList<MergeResult> mergedRanking;
+		RankingMerge rm = new RankingMerge(a, b);
+		mergedRanking = rm.getMergedConcepts();
+		if (printInfo)
+			System.out.println("number of concepts in merged ranking: "
+					+ mergedRanking.size());
+
+		// iterate over all concepts:
+		for (Iterator<MergeResult> iterConcepts = mergedRanking.iterator(); iterConcepts
+				.hasNext();) {
+			MergeResult currentConcept = iterConcepts.next();
+
+			// look up the current concept in rankingA:
+			int rankInR1 = currentConcept.getRankNumber();
+			double simInR1 = currentConcept.getRelevanceValue();
+
+			// and in rankingB:
+			int rankInR2 = currentConcept.getSecondRankNumber();
+			double simInR2 = currentConcept.getSecondRelevanceValue();
+
+			// determine shift:
+			double shift = Math.abs(simInR1 - simInR2);
+
+			// determine weight:
+			int weight = 0;
+			if (currentConcept.getRankNumber() != -1
+					&& currentConcept.getSecondRankNumber() != -1) {
+				// if concept is in both rankings
+				weight = Math.max(maxRanksCount
+						- currentConcept.getRankNumber(), maxRanksCount
+						- currentConcept.getSecondRankNumber());
+			} else {
+				weight = maxRanksCount;
+			}
+
+			// sum up:
+			nonNormalizedImpact += shift * weight;
+			if (printInfo)
+				System.out.println("Concept: " + currentConcept.getName()
+						+ ", Shift: " + shift + ", Weight: " + weight);
+		}
+
+		if (printInfo) {
+			System.out.println("number of concepts in merged ranking: "
+					+ mergedRanking.size());
+			System.out.println(nonNormalizedImpact + " / " + getDIRrelMax(a, b)
+					+ " = ");
+		}
+		double result = nonNormalizedImpact / getDIRrelMax(a, b);
+
+		// Round the result to 5 decimals
+		result = Math.round(result * 100000) / 100000.0;
+		return result;
+	}
+
+	private static double getDIRrelMax(Ranking a, Ranking b) {
+		int aRanksCount = a.getNumberOfRanks();
+		int bRanksCount = b.getNumberOfRanks();
+		Ranking longerRanking, shorterRanking;
+
+		if (aRanksCount >= bRanksCount) {
+			longerRanking = a;
+			shorterRanking = b;
+		} else {
+			longerRanking = b;
+			shorterRanking = a;
+		}
+		int maxRanksCount = longerRanking.getNumberOfRanks();
+		int minRanksCount = shorterRanking.getNumberOfRanks();
+
+		double sum1 = 0.0;
+		double sum2 = 0.0;
+		for (int m = 1; m <= longerRanking.getNumberOfRanks(); m++) {
+			sum1 += longerRanking.getRank(m - 1).getRelevanceValue()
+					* longerRanking.getRank(m - 1).getNumberOfResults();
+		}
+		for (int n = 1; n <= shorterRanking.getNumberOfRanks(); n++) {
+			sum2 += shorterRanking.getRank(n - 1).getRelevanceValue()
+					* shorterRanking.getRank(n - 1).getNumberOfResults();
+		}
+
+		return maxRanksCount * (sum1 + sum2);
+	}
+
+	private static double getDIRrankMax(Ranking a, Ranking b) {
+		int aRanksCount = a.getNumberOfRanks();
+		int bRanksCount = b.getNumberOfRanks();
+		Ranking longerRanking, shorterRanking;
+
+		if (aRanksCount >= bRanksCount) {
+			longerRanking = a;
+			shorterRanking = b;
+		} else {
+			longerRanking = b;
+			shorterRanking = a;
+		}
+		int maxRanksCount = longerRanking.getNumberOfRanks();
+		int minRanksCount = shorterRanking.getNumberOfRanks();
+
+		int sum1 = 0;
+		int sum2 = 0;
+		for (int m = 1; m <= maxRanksCount; m++) {
+			sum1 += (maxRanksCount + 1 - m)
+					* longerRanking.getRank(m - 1).getNumberOfResults();
+		}
+		for (int n = 1; n <= minRanksCount; n++) {
+			sum2 += (maxRanksCount + 1 - n)
+					* shorterRanking.getRank(n - 1).getNumberOfResults();
+		}
+		return maxRanksCount * (sum1 + sum2);
+	}
+
+}
